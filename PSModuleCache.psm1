@@ -463,7 +463,8 @@ function Get-ModuleSavePath {
       }
 
    } elseif ($env:RUNNER_OS -in @('Linux', 'MacOS')) {
-      $null = sudo chown -R runner $script:PsLinuxCoreModulePath
+      #TODO TEST $null = sudo chown -R runner $script:PsLinuxCoreModulePath
+      Write-Warning 'Missing command SUDO'
       Write-Output $script:PsLinuxCoreModulePath
    } else {
       throw "`$env:RUNNER_OS ('$env:RUNNER_OS') is empty or unknown."

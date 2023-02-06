@@ -11,12 +11,12 @@ jobs:
         id: psmodulecache
         uses: potatoqualitee/psmodulecache@v5.2
         with:
-          modules-to-cache: PSDeploy, BuildHelpers, PlatyPS, Pester:5.0.2, EZOut
+          modules-to-cache: PSDeploy, BuildHelpers, platyPS, Pester:5.0.2, EZOut
           shell: pwsh
 
       - name: Show the previous action works
         shell: pwsh
         run: |
-          Get-Module -Name PSDeploy, BuildHelpers, PlatyPS, EZOut -ListAvailable
+          Get-Module -Name PSDeploy, BuildHelpers, platyPS, EZOut -ListAvailable
           $env:psmodulePath -split ';'|Select-Object FullName
           dir /usr/local/share/powershell/Modules -recurse|Select-Object FullName

@@ -1,0 +1,29 @@
+name: UbuntuRestoreCahceOnPsCore
+on:
+  workflow_dispatch:
+
+jobs:
+  InstallModulesOnPsCore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install and cache PowerShell modules
+        id: psmodulecache
+        uses: potatoqualitee/psmodulecache@v5.2
+        with:
+          modules-to-cache: PSDeploy, BuildHelpers, PlatyPS, Pester:5.0.2, EZOut
+          shell: pwsh
+
+      - name: Show the previous action works
+        shell: pwsh
+        run: Get-Module -Name PSDeploy, BuildHelpers, PlatyPS, EZOut -ListAvailable
+
+      - name: Show that the Action works on pwsh
+        shell: pwsh
+        run: |
+          'PSDeploy', 'BuildHelpers', 'PlatyPS', 'EZOut' |
+           foreach {
+              Import-Module $_
+              Write-Host "$_ '$(Get-Module $_ | Select-Object Name, Version, RepositorySourceLocation)'"
+          }

@@ -1,9 +1,9 @@
-name: UbuntuRestoreCahceOnPsCore
+name: UbuntuRestoreCacheOnPsCore
 on:
   workflow_dispatch:
 
 jobs:
-  InstallModulesOnPsCore:
+  RestoreCacheOnPsCore:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

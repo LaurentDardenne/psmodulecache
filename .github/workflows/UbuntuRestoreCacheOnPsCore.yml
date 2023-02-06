@@ -18,5 +18,5 @@ jobs:
         shell: pwsh
         run: |
           Get-Module -Name PSDeploy, BuildHelpers, PlatyPS, EZOut -ListAvailable
-          $env:psmodulePath -split ';'
-          dir /usr/local/share/powershell/Modules -recurse
+          $env:psmodulePath -split ';'|Select-Object FullName
+          dir /usr/local/share/powershell/Modules -recurse|Select-Object FullName

@@ -495,12 +495,10 @@ function New-ModuleSavePath {
       $parameters.AllowPrerelease = $cacheinfo.Allowprerelease
 
       $NugetPackage = Find-ModuleCacheName @parameters
-      $NugetPackageName = $NugetPackage.Name
-
-      if ($null -eq $NugetPackageName)
+      if ($null -eq $NugetPackage)
       { $ModuleName = $cacheinfo.Name }
       else
-      { $ModuleName = $NugetPackageName }
+      { $ModuleName = $NugetPackage.Name }
 
       # For the management of a new version in the directory of an EXISTING module (see the image of the runner)
       # the new version number is added to the name of the save path, if it is specified.

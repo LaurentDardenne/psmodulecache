@@ -1,6 +1,6 @@
 name: UbuntuRestoreCacheOnPsCore
 on:
-  workflow_dispatch:
+    workflow_dispatch:
 
 jobs:
   RestoreCacheOnPsCore:

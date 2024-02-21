@@ -18,6 +18,10 @@ inputs:
     description: "Triggers an update of one or more modules."
     required: false
     default: "false"
+  userepositorieswithcredential:
+    description: "Indicates the use of credential when accessing the PSRepository requiring authentication (account name / password)."
+    required: false
+    default: "false"
   prefixidentifier:
     description: "Prefixes the cache key name with the Workflow name ($env:GITHUB_WORKFLOW). Used to group cache keys."
     required: false
@@ -32,6 +36,12 @@ runs:
         Import-Module $env:GITHUB_ACTION_PATH/PSModuleCache.psd1
         Write-Output "Getting variables for cacher"
 
+        #Requirements :
+        # In a dedicated configuration workflow 'run' step, the user must define a file name:
+        #  $RepositoriesAuthenticationFileName='RepositoriesCredential.Datas.ps1xml'
+        # then create the 'PSModuleCacheCredentialFileName' environment variable (this name is mandatory):
+        #  echo "PSModuleCacheCredentialFileName=$RepositoriesAuthenticationFileName" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
         $Parameters = @{
           Modules = "${{ inputs.modules-to-cache }}"
           PrereleaseModules = "${{ inputs.modules-to-cache-prerelease }}"
@@ -39,6 +49,8 @@ runs:
           Updatable = [boolean]::Parse("${{ inputs.updatable }}")
           PrefixIdentifier = [boolean]::Parse("${{ inputs.prefixidentifier }}")
           ContainerJob = ("${{ job.container.id}}" -ne "")
+          RepositoriesAuthenticationFileName=$Env:PSModuleCacheCredentialFileName
+          UseRepositoriesWithCredential=[boolean]::Parse("${{ inputs.UseRepositoriesWithCredential }}")
         }
         Write-Output "Action Parameters = $([PsCustomObject]$Parameters)"
 

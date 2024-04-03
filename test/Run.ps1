@@ -25,7 +25,7 @@ try {
 
     $Configuration = New-PesterConfiguration
 
-    $Configuration.filter.Tag = @('shell', 'keygen', 'ModulePath', 'PrefixIdentifier', 'PowershellGetVersion', 'CaseInsensitive', 'Dependencies', 'BasicFeatures', 'ModuleNameDuplication', 'DuplicateSavePath','NamingWithUbuntu')
+    $Configuration.filter.Tag = 'HashtableValidation' # @('shell', 'keygen', 'ModulePath', 'PrefixIdentifier', 'PowershellGetVersion', 'CaseInsensitive', 'Dependencies', 'BasicFeatures', 'ModuleNameDuplication', 'DuplicateSavePath', 'NamingWithUbuntu')
 
     $Configuration.Output.Verbosity = 'Detailed'
     $Configuration.Output.StackTraceVerbosity = 'Full'

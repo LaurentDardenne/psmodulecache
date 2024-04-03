@@ -21,10 +21,11 @@ It is possible to configure a cache with an automatic update, the module search 
     4. [Install a module with a required version, using powershell on Windows](#example4)
     5. [Install a module with an automatic version update, using pswh on MacOS](#example5)
     6. [Using powershell on Windows](#example6)
-6. [Cache key construction method](#buildcachekey)
-7. [Cache limits](#cachelimits)
-8. [Acceptance of a license](#acceptancelicense)
-9. [Known issues](#knownissues)
+6. [Configure Action to access PSRepositories requiring authentication](#Credential)
+7. [Cache key construction method](#buildcachekey)
+8. [Cache limits](#cachelimits)
+9. [Acceptance of a license](#acceptancelicense)
+10. [Known issues](#knownissues)
 
 ## How to use it <a name="howto"></a>
 
@@ -445,6 +446,101 @@ jobs:
       run: |
           Get-Module -Name PSFramework, PoshRSJob -ListAvailable | Select Path
           Import-Module PSFramework
+```
+
+## Configure Action to access PSRepositories requiring authentication.<a name="Credential"></a>
+
+A module to be placed in the cache can be located in a PSRepository requiring credentials. The Action code cannot discover these repositories, it is up to you to take care of this step.
+
+First, you must create each account name, and the associated password, in your repository settings, [see](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository).
+
+Then you create a step in your workflow (Action.yml):
+
+```yml
+      - name: Setting additional PSRepositories
+        shell: powershell
+        run: |
+            #Use repositories with credential
+            ...
+```
+
+The principle is to create a hashtable containing the credentials then to serialize them in a file, the only information that the Action must know is the name of this file. For this you must use an environment variable named '**PSModuleCacheCredentialFileName**'.
+
+To construct the full path name, the Action code uses the automatic Powershell variable named **$Home** :
+
+```powershell
+ $RepositoriesAuthenticationFileName='RepositoriesCredential.Datas.ps1xml'
+ $FullPath=Join-Path $home -ChildPath $RepositoriesAuthenticationFileName
+```
+
+We add the creation of the environment variable '**PSModuleCacheCredentialFileName**':
+
+```powershell
+  echo "PSModuleCacheCredentialFileName=$RepositoriesAuthenticationFileName" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+```
+
+_Note_: this environment variable is not accessible in the step that creates it, but in the following ones.
+
+Then we build the hashtable containing the credentials, each key name is an existing PSRepository name and each associated value is a PSCredential object:
+
+```powershell
+  $CloudsmithRepositoryName='test-psmodulecache'
+  $RepositoriesCredential=@{}
+   #We use the secrets created previously
+  $Credential=New-Object PSCredential('${{ secrets.CLOUDSMITHACCOUNTNAME }}',$(ConvertTo-SecureString '${{ secrets.CLOUDSMITHPASSWORD }}' -AsPlainText -Force) )
+  $RepositoriesCredential.$CloudsmithRepositoryName=$Credential
+```
+
+Additional PSRepositories must therefore be configured before executing the '_PSModuleCache_' Action:
+
+```powershell
+ Register-PackageSource -Name $CloudsmithRepositoryName -Location 'https://nuget.cloudsmith.io/test/psmodulecache/v2/' -Trusted -Credential $credential -ProviderName NuGet > $null
+ Register-PSRepository -Name $CloudsmithRepositoryName -SourceLocation 'https://nuget.cloudsmith.io/test/psmodulecache/v2/' -PublishLocation 'https://nuget.cloudsmith.io/test/psmodulecache/v2/' -InstallationPolicy 'trusted' -Credential $Credential
+```
+
+Once these settings are made, save the hashtable using the **Export-Clixml** cmdlet:
+
+```powershell
+ $RepositoriesCredential | Export-CliXml -Path (Join-Path $home -ChildPath $RepositoriesAuthenticationFileName)
+```
+
+_Note_: this step can also be used to configure additional repositories that do not use credentials:
+
+```powershell
+ Register-PSRepository -Name 'OttoMatt' -publishlocation='https://www.myget.org/F/ottomatt/api/v2/package' -sourcelocation='https://www.myget.org/F/ottomatt/api/v2' -InstallationPolicy 'trusted'
+```
+
+It remains to configure the Action '_PSModuleCache_' :
+
+```yml
+      with:
+        modules-to-cache: MyModuleName_in_a_repository_with_credential,InvokeBuild
+        shell: powershell
+        UseRepositoriesWithCredential: "true"
+```
+
+The value '_true_' assigned to the '**UseRepositoriesWithCredential**' parameter will trigger:
+
+* loading the .ps1xml file,
+* analysis of its structure and content,
+* will add the _-Credential_ parameter when searching for a module and when saving.
+
+Note :
+The search for a module is done in all the declared repositories:
+
+```powershell
+  $RepositoryNames= @(Get-PSRepository|Select-Object -ExpandProperty Name)
+```
+
+And the hashtable key names allow you to find the repositories requiring credentials:
+
+```powershell
+  $RepositoriesWithCredential=Import-CliXml -Path (Join-Path $home -ChildPath $env:PSModuleCacheCredentialFileName) }
+  foreach ($RepositoryName in $RepositoryNames)
+  {
+     if ($RepositoryName -in $RepositoriesWithCredential.Keys)
+     { $Credential=$RepositoriesWithCredential."$RepositoryName" }
+  ...
 ```
 
 ## Cache key construction method <a name="buildcachekey"></a>

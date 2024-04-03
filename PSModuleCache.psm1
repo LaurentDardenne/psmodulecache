@@ -171,6 +171,51 @@ function ConvertTo-Version {
    return $PowerShellGetVersion.Version
 }
 
+Function Test-RepositoriesCredential {
+   <#
+Check if a serialized object matches the expected structure rules:
+   if UseRepositoriesWithCredential equal $true THEN
+    - file must exist, 
+    - the XML file must be valid,
+    - it must contain a hashtable
+    - It must contain at least one entry
+    - all entries must be of type [Key=string,Value=credential]
+    - a key must not be an empty string
+    -for each key name a corresponding psrepository must exist
+#>
+   param ($InputObject)
+
+   function Test-TrueforAll {
+       param([scriptblock] $Validation)
+
+       $NumberOfValidObject = ($InputObject.GetEnumerator().Where($Validation, 'Default')).Count
+       return ( $NumberOfValidObject -eq $InputObject.Count )
+   }
+
+   $ValidationTypes = { ($_.Key -is [System.String]) -and ($_.Value -is [System.Management.Automation.PSCredential]) }
+   $ValidationKeys = { $_.Key -ne [string]::Empty }
+   $ValidationRepositories = { $null -ne (Get-PSRepository -Name $_.Key -ErrorAction SilentlyContinue) }
+   $Result = $false
+
+   if ($InputObject -is [System.Collections.Hashtable]) {
+       if ($InputObject.Count -ge 1) {
+           if (Test-TrueforAll -Validation $ValidationTypes ) {
+               if (Test-TrueforAll -Validation $ValidationKeys ) {
+                   if (Test-TrueforAll -Validation $ValidationRepositories )
+                   { $result = $true }
+                   else
+                   { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationUnknownRepository }
+               } else
+               { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationInvalidKey }
+           } else
+           { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationWrongItemType }
+       } else
+       { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationMustContainAtLeastOneEntry }
+   } else
+   { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationMustBeHashtable }
+   return $Result
+}
+
 function Test-RepositoryName {
    #Repository Qualified Module Name : Repository name cannot be empty and must exist
    param($RepositoryName)
@@ -1092,7 +1137,7 @@ function Save-ModuleCache {
          # If the version is different then Save-Module completes the contents of the directory with the new version.
          Write-Debug "Save-Module -Path $ModulePath -name $($ModuleCacheInformation.Name) -version $($ModuleCacheInformation.Version) -allow $($ModuleCacheInformation.Allowprerelease)  -repo $($ModuleCacheInformation.Repository)"
 
-         Save-Module @Parameters -Path $ModulePath -ErrorAction Stop -AcceptLicense -Force 
+         Save-Module @Parameters -Path $ModulePath -ErrorAction Stop -AcceptLicense -Force
 
          #Once the module and its dependencies are written to disk, we check the naming convention.
          #Changing $WarningPreference in the caller's scope has no impact on this module's scope.

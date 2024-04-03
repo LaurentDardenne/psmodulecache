@@ -2,6 +2,12 @@
 
 ## Release Notes
 
+### v7.0
+
+* Add Ability to use PSRepositories with credentials (#22).
+* Add the Action parameter 'useRepositoriesWithCredential' (true/false),
+  this parameter is optionnal, his default value is "false".
+
 ### v6.1
 
 * Fix (#59). Modules requesting acceptance of a license triggered an exception. Now licenses are always accepted.

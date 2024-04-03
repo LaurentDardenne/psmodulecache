@@ -1,5 +1,5 @@
 name: Pester
-on: [push, pull_request,workflow_dispatch]
+on: [push, pull_request]
 
 jobs:
   test-pwsh:
@@ -13,6 +13,12 @@ jobs:
       - name: Run Pester tests (pwsh)
         shell: pwsh
         run: |
+          $Env:CLOUDSMITHACCOUNTNAME='${{ secrets.CLOUDSMITHACCOUNTNAME }}'
+          $Env:CLOUDSMITHPASSWORD='${{ secrets.CLOUDSMITHPASSWORD }}'
+
+          $RepositoriesAuthenticationFileName='RepositoriesCredential.Datas.ps1xml'
+          $Env:PSModuleCacheCredentialFileName=$RepositoriesAuthenticationFileName
+
           cd test
           ./Run.ps1
 
@@ -24,6 +30,13 @@ jobs:
         shell: powershell
         run: |
           $global:iswindows = $true
+
+          $Env:CLOUDSMITHACCOUNTNAME='${{ secrets.CLOUDSMITHACCOUNTNAME }}'
+          $Env:CLOUDSMITHPASSWORD='${{ secrets.CLOUDSMITHPASSWORD }}'
+
+          $RepositoriesAuthenticationFileName='RepositoriesCredential.Datas.ps1xml'
+          $Env:PSModuleCacheCredentialFileName=$RepositoriesAuthenticationFileName
+
           cd test
           .\Run.ps1
 

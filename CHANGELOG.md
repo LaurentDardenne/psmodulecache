@@ -2,6 +2,12 @@
 
 ## Release Notes
 
+### v7.0
+
+* Add Ability to use PSRepositories with credentials (#22).
+* Add the Action parameter 'useRepositoriesWithCredential' (true/false),
+  this parameter is optionnal, his default value is "false".
+
 ### v6.2
 
 * Bump actions/cache to v4. Node 16 is deprecated, v4 uses Node 20. Thanks to Frode Flaten (fflaten).

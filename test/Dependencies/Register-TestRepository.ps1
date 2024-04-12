@@ -38,6 +38,24 @@ $CloudsmithPrivateRepositoryName = 'privatepsmodulecache'
 $CloudsmithPrivateUriLocation = 'https://nuget.cloudsmith.io/actionpsmodulecache/privatepsmodulecache/v2/'
 
 #todo dans un step (externe) ou dans les script (interne) ?
+#todo supprimer l'usage de variable Env: ?
+<#
+https://docs.github.com/fr/actions/security-guides/using-secrets-in-github-actions
+
+- name: utiliser step env
+  env:
+    username: ${{ secrets.TEST_USERNAME }}
+    password: ${{ secrets.TEST_PASSWORD }}
+  run: |
+
+le nom du fichier doit être connu avant de charger le module ( car le module recherche les repositories existant) :
+l'enregistrement des nouveaux repo se fait avant et on doit connaitre les infos
+
+          $RepositoriesAuthenticationFileName='RepositoriesCredential.Datas.ps1xml'
+          $Env:PSModuleCacheCredentialFileName=$RepositoriesAuthenticationFileName
+
+
+#>
 $RepositoriesAuthenticationFileName = 'RepositoriesCredential.Datas.ps1xml'
 $Env:PSModuleCacheCredentialFileName = $RepositoriesAuthenticationFileName
 
@@ -51,6 +69,11 @@ $Credential = New-Object PSCredential($env:CloudsmithAccountName, $(ConvertTo-Se
 $RepositoriesCredential.$CloudsmithPrivateRepositoryName = $Credential
 
 #TODO nécessaire ?
+#!!! le traitement doit être commun au WF, à placer dans le module ??
+<#
+l'appelant connait le nom du repo(clé) et le credential(valeur)
+le module connait le traitement ( create hashtable) et le nom du fichier
+#>
 
 #Save credential datas into the filesystem
 #$RepositoriesCredential | Export-Clixml -Path (Join-Path $home -ChildPath $RepositoriesAuthenticationFileName)

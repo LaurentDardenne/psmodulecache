@@ -1,7 +1,7 @@
 #RepositoriesWithCredential.Tests.ps1
 # Check if a serialized object matches the expected structure
 
-<# TODO
+<# TODO le nom ne correspond pas on test la structure pas le comportment si le fichier est OK
 !!! combinaisons pour les tests
 un repo : psgallery (FAIT)
 deux repos : psgallery et psmodulecache (FAIT)
@@ -20,7 +20,7 @@ Créer une repository pour les module dupliqués ( avec lequel/lesquels ?)
 $global:PSModuleCacheResources = Import-PowerShellDataFile "$PSScriptRoot/../PSModuleCache.Resources.psd1" -EA Stop
 Import-Module "$PSScriptRoot/../PSModuleCache.psd1" -Force
 
-Describe 'Test-RepositoriesCredential function. When there is no error.' -Tag 'HashtableValidation' {
+Describe "'Test-RepositoriesCredential' function. When there is no error." -Tag 'HashtableValidation' {
 
    Context "Valid hashtable object" {
       It "Only one entry" -Skip:((Test-Path Env:CLOUDSMITHPASSWORD) -eq $false) {
@@ -38,7 +38,7 @@ Describe 'Test-RepositoriesCredential function. When there is no error.' -Tag 'H
          $Credential = New-Object PSCredential($Env:CLOUDSMITHACCOUNTNAME, $(ConvertTo-SecureString $Env:CLOUDSMITHPASSWORD -AsPlainText -Force) )
          $RepositoriesCredential = @{}
          $RepositoriesCredential.'PSGallery' = $Credential
-         $RepositoriesCredential.'OttoMatt' = $Credential
+         $RepositoriesCredential.'OttoMatt' = $Credential #todo contains $null ?
 
          InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
             $script:FunctionnalErrors.Clear()
@@ -57,7 +57,11 @@ Describe 'Test-RepositoriesCredential function. When there is no error.' -Tag 'H
    }
 }
 
-Describe 'Test-RepositoriesCredential function. When there error.' -Tag 'HashtableValidation' {
+Describe "'Test-RepositoriesCredential' function. When there error." -Tag 'HashtableValidation' {
+
+   #todo file not exist
+   #todo file exist but empty (fsutil.exe file createnew c:\temp\test.ps1xml 0)
+   #todo   $e.exception.hresult = -2146232000 - 0x80131940. Exception Fr : "System.Xml.XmlException: Élément racine manquant."
 
    Context "Invalid credential hashtable." {
       It "Invalid serialized object : ValidationMustBeHashtable" {

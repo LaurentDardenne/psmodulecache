@@ -175,7 +175,7 @@ Function Test-RepositoriesCredential {
    <#
 Check if a serialized object matches the expected structure rules:
    if UseRepositoriesWithCredential equal $true THEN
-    - file must exist, 
+    - file must exist,
     - the XML file must be valid,
     - it must contain a hashtable
     - It must contain at least one entry
@@ -750,6 +750,7 @@ function Test-FunctionnalError {
    }
 }
 
+#Main function
 function Get-ModuleCache {
    <#
 .Synopsis

@@ -38,7 +38,13 @@ New-Variable -Name PsWindowsModulePath -Option ReadOnly -Scope Script -Value "$e
 New-Variable -Name PsWindowsCoreModulePath -Option ReadOnly -Scope Script -Value "$env:ProgramFiles\PowerShell\Modules"
 New-Variable -Name PsLinuxCoreModulePath -Option ReadOnly -Scope Script -Value '/usr/local/share/powershell/Modules/'
 
+#Invalid Chars (> : ? etc) or invalid filenames (COM1, LPT1,CON, etc) are managed by Powershell
 New-Variable -Name CacheFileName -Option ReadOnly -Scope Script -Value 'PSModuleCache.Datas.xml'
+New-Variable -Name RepositoriesAuthenticationFileName -Option ReadOnly -Scope Script -Value 'PSModuleCache.RepositoriesCredential.ps1xml'
+New-Variable -Name RepositoriesAuthenticationFullPath -Option ReadOnly -Scope Script -Value (Join-Path $home -ChildPath $script:RepositoriesAuthenticationFileName)
+
+New-Variable -Name RepositoriesCredential -Option ReadOnly -Scope Script -Value $null
+New-Variable -Name isExistRepositoriesWithCredential -Option ReadOnly -Scope Script -Value $false
 
 #We do not check all the characters returned by the GetInvalidFileNameChars() API.
 New-Variable -Name InvalidCharsExceptBackslash -Option ReadOnly -Scope Script -Value '"|\<|\>|\||\*|\?|/|\:'
@@ -171,6 +177,32 @@ function ConvertTo-Version {
    return $PowerShellGetVersion.Version
 }
 
+Function Import-Credential {
+   <#
+ Read the serialized credential.
+ Return an object or throw an exception.
+#>
+   param($Path)
+
+   try {
+      $Credentials = Import-Clixml -Path $Path
+      if ($null -eq $Credential) {
+         $message = $PSModuleCacheResources.InvalidObject
+         #Add-FunctionnalError -Message $Message
+         throw $Message
+      }
+
+      return , $Credential
+   } catch [System.Xml.XmlException] {
+      # Missing root element : the file has a size of zero
+      #Data at the root level is invalid : The file do not contains xml Datas
+      $Message = $PSModuleCacheResources.ImpossibleToReadTheCredentialFile -f $Path
+      $Message += "`r`n$_"
+      Add-FunctionnalError -Message $Message
+      throw $_
+   }
+}
+
 Function Test-RepositoriesCredential {
    <#
 Check if a serialized object matches the expected structure rules:
@@ -186,10 +218,10 @@ Check if a serialized object matches the expected structure rules:
    param ($InputObject)
 
    function Test-TrueforAll {
-       param([scriptblock] $Validation)
+      param([scriptblock] $Validation)
 
-       $NumberOfValidObject = ($InputObject.GetEnumerator().Where($Validation, 'Default')).Count
-       return ( $NumberOfValidObject -eq $InputObject.Count )
+      $NumberOfValidObject = ($InputObject.GetEnumerator().Where($Validation, 'Default')).Count
+      return ( $NumberOfValidObject -eq $InputObject.Count )
    }
 
    $ValidationTypes = { ($_.Key -is [System.String]) -and ($_.Value -is [System.Management.Automation.PSCredential]) }
@@ -198,24 +230,61 @@ Check if a serialized object matches the expected structure rules:
    $Result = $false
 
    if ($InputObject -is [System.Collections.Hashtable]) {
-       if ($InputObject.Count -ge 1) {
-           if (Test-TrueforAll -Validation $ValidationTypes ) {
-               if (Test-TrueforAll -Validation $ValidationKeys ) {
-                   if (Test-TrueforAll -Validation $ValidationRepositories )
-                   { $result = $true }
-                   else
-                   { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationUnknownRepository }
-               } else
-               { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationInvalidKey }
-           } else
-           { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationWrongItemType }
-       } else
-       { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationMustContainAtLeastOneEntry }
+      if ($InputObject.Count -ge 1) {
+         if (Test-TrueforAll -Validation $ValidationTypes ) {
+            if (Test-TrueforAll -Validation $ValidationKeys ) {
+               if (Test-TrueforAll -Validation $ValidationRepositories )
+               { $result = $true }
+               else
+               { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationUnknownRepository }
+            } else
+            { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationInvalidKey }
+         } else
+         { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationWrongItemType }
+      } else
+      { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationMustContainAtLeastOneEntry }
    } else
-   { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationMustBeHashtable }
+   { Add-FunctionnalError -Message ( $PSModuleCacheResources.ValidationMustBeHashtable -f $InputObject.GetType() ) }
    return $Result
 }
 
+Function Update-RepositoriesCredential {
+   # All repositories must be associated with a valid or empty credential object
+   Param()
+
+   foreach ($RepoName in $script:RepositoryNames) {
+      if (-not $script:RepositoriesCredential.ContainsKey($RepoName)) {
+         #We assume that the other repositories do not use credential.
+         #if we use the 'credential' parameter with Find/Save-Module its value cannot be $null and if it is 'empty' PsGet does not take it into account.
+         $script:RepositoriesCredential.Add($RepoName, [PSCredential]::Empty)
+      }
+   }
+}
+
+Function Set-RepositoriesCredential {
+   <#
+if the RepositoriesAuthentication file exist and contains an valid object THEN
+  - assigns $TRUE to $isExistRepositoriesWithCredential,
+  - load the xml file $RepositoriesAuthenticationFullPath
+  - tests the hashtable structure.
+
+Used when searching and saving a module.
+#>
+   param()
+
+   If (Test-Path $script:RepositoriesAuthenticationFullPath) {
+
+      $Object = Import-Credential -Path $script:RepositoriesAuthenticationFullPath
+
+      $Credentials = Test-RepositoriesCredential -InputObject $Object
+      #The variable is protected but its content is mutable.
+      Set-Variable -Name RepositoriesCredential -Value $Credentials -Force
+
+      Update-RepositoriesCredential #todo var /param
+
+      Set-Variable -Name isExistRepositoriesWithCredential -Value $true -Force
+   }
+}
 function Test-RepositoryName {
    #Repository Qualified Module Name : Repository name cannot be empty and must exist
    param($RepositoryName)
@@ -715,6 +784,14 @@ function New-ModuleCache {
       Add-FunctionnalError -Message ($PSModuleCacheResources.PrereleaseModuleNamesAreDuplicated -F "$($DuplicateModuleName.Name)")
    }
 
+   if ($isExistRepositoriesWithCredential) {
+      #todo try {} catch{invalid file }
+      $script:RepositoriesCredential = Import-Clixml -Path $script:RepositoriesAuthenticationFullPath
+      if ( (Test-RepositoriesCredential -InputObject $RepositoriesCredential) -eq $false)
+      { return } #In this case the code after this line will fail, FunctionnalError create 1..n messages 'ValidationXXX'
+   }
+   #todo on passe le paramètre où on y a accède via la varaible du module ? pour les tests ?
+
    $ModuleCacheInformations = @(
       Split-ModuleParameter -ContainerJob $Action.ContainerJob -modules $StableModules
       Split-ModuleParameter -ContainerJob $Action.ContainerJob -modules $PrereleaseModules  -AllowPrerelease
@@ -763,6 +840,7 @@ function Get-ModuleCache {
       [switch]$Pester
    )
    $script:FunctionnalErrors.Clear()
+   Set-RepositoriesCredential #todo renommer
    $ModulesCache = New-ModuleCache -Action $Action
 
    if ($Pester) {
@@ -905,6 +983,7 @@ function Find-ModuleCacheDependencies {
       $Repository,
       $RequiredVersion,
       [switch]$AllowPrerelease,
+      $RepositoriesAuthentication, #todo
       [switch]$RepositoryQualified
    )
    Function Remove-ModuleDependencyDuplicate {
@@ -919,6 +998,8 @@ function Find-ModuleCacheDependencies {
    }
 
    try {
+      #todo usecredentail
+      #todo scénario : si un module exist dans deux repos dont l'un est avec cred l'autre pas
 
       if ([string]::IsNullOrEmpty($RequiredVersion)) {
          #If provided, retrieved the requested version, otherwise the last one.
@@ -1116,6 +1197,8 @@ function Save-ModuleCache {
       { throw $_ }
    }
 
+   Set-RepositoriesCredential #todo
+
    #Here we save modules and their dependencies, only the 'New-ModuleSavePath' function knows the paths to save in the cache.
    foreach ($ModulePath in $ModulesCache.ModuleSavePaths) {
       foreach ($ModuleCacheInformation in $ModulesCache.ModuleCacheInformations) {
@@ -1165,7 +1248,8 @@ function New-ModuleCacheParameter {
 
       [switch]$Updatable,
       [switch]$PrefixIdentifier,
-      [bool]$ContainerJob
+      [switch]$UseRepositoriesWithCredential,
+      [bool]$ContainerJob #todo change to Switch
    )
 
    if ($script:RepositoryNames.Count -eq 0)
@@ -1187,14 +1271,15 @@ function New-ModuleCacheParameter {
    [String[]]$Shells = [Linq.Enumerable]::Distinct($tab, [System.StringComparer]::CurrentCultureIgnoreCase)
 
    $modulecacheparam = [pscustomobject]@{
-      PSTypeName                 = 'ModuleCacheParameter';
-      ModulesParameter           = $Modules -as [pscustomobject];
-      PrereleaseModulesParameter = $PrereleaseModules -as [pscustomobject];
-      ShellsParameter            = $Shells -as [pscustomobject];
-      CacheType                  = [CacheType]$(if ($Updatable.IsPresent) { [CacheType]::Updatable } else { [CacheType]::Immutable } )
-      Updatable                  = $Updatable;
-      PrefixIdentifier           = $PrefixIdentifier
-      ContainerJob               = $ContainerJob
+      PSTypeName                    = 'ModuleCacheParameter';
+      ModulesParameter              = $Modules -as [pscustomobject];
+      PrereleaseModulesParameter    = $PrereleaseModules -as [pscustomobject];
+      ShellsParameter               = $Shells -as [pscustomobject];
+      CacheType                     = [CacheType]$(if ($Updatable.IsPresent) { [CacheType]::Updatable } else { [CacheType]::Immutable } );
+      Updatable                     = $Updatable;
+      PrefixIdentifier              = $PrefixIdentifier;
+      UseRepositoriesWithCredential = $UseRepositoriesWithCredential;
+      ContainerJob                  = $ContainerJob;
    }
 
    $sbToArray = {

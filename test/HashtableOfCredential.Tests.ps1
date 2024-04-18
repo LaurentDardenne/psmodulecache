@@ -1,7 +1,7 @@
-#RepositoriesWithCredential.Tests.ps1
+#HashtableOfCredential.Tests.ps1
 # Check if a serialized object matches the expected structure
 
-<# TODO le nom ne correspond pas on test la structure pas le comportment si le fichier est OK
+<#
 !!! combinaisons pour les tests
 un repo : psgallery (FAIT)
 deux repos : psgallery et psmodulecache (FAIT)
@@ -57,16 +57,18 @@ Describe "'Test-RepositoriesCredential' function. When there is no error." -Tag 
    }
 }
 
-Describe "'Test-RepositoriesCredential' function. When there error." -Tag 'HashtableValidation' {
+Describe "Repositories with credential. When there error." -Tag 'HashtableValidation' {
+   Context "Invalid file." {
+      It 'The file exist but contains zero octet.' { #todo
+         $Path = Join-Path $home -ChildPath $Action.RepositoriesAuthenticationFileName
+         fsutil.exe file createnew "$Path" 0
+         try {
+            $RepositoriesCredential = Import-Clixml -Path $Path
+         } catch [System.Xml.XmlException] {
+            if ($_.hresult -eq 0x80131940) #-2146232000 :Missing root element
+            {}
 
-   #todo file not exist
-   #todo file exist but empty (fsutil.exe file createnew c:\temp\test.ps1xml 0)
-   #todo   $e.exception.hresult = -2146232000 - 0x80131940. Exception Fr : "System.Xml.XmlException: Élément racine manquant."
-
-   Context "Invalid credential hashtable." {
-      It "Invalid serialized object : ValidationMustBeHashtable" {
-         $RepositoriesCredential = @(1..2)
-
+         }
          InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
             $script:FunctionnalErrors.Clear()
             Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
@@ -74,57 +76,96 @@ Describe "'Test-RepositoriesCredential' function. When there error." -Tag 'Hasht
             $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationMustBeHashtable
          }
       }
+      It 'The file exist but it is not a xml file.' { #todo
+         <#
+@'
+Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"
+'@ > c:\temp\testfile
+#>
+      }
 
-      It "Invalid serialized object : ValidationMustContainAtLeastOneEntry" {
-         $RepositoriesCredential = @{}
+      It 'The file exist but Import-ClimXml return $null.' { #todo
 
-         InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
-            $script:FunctionnalErrors.Clear()
-            Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
-            $script:FunctionnalErrors.Count | Should -Be 1
-            $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationMustContainAtLeastOneEntry
+         <#
+@'
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">
+</Objs>
+'@ > c:\temp\testfile
+#>
+      }
+
+      Context "Invalid setting." {
+         It "Action`'s 'UseRepositoriesWithCredential' parameter contains true but the credential file do not exist." {
+            throw 'todo' #todo
+         }
+
+         It "Action`'s 'UseRepositoriesWithCredential' parameter contains false but the file exist." {
+            throw 'todo'
          }
       }
 
-      It "Invalid serialized object : ValidationWrongItemType" {
-         $Credential = New-Object PSCredential('Test', $(ConvertTo-SecureString 'Test' -AsPlainText -Force) )
-         $RepositoriesCredential = @{}
-         $RepositoriesCredential.'PSGallery' = $Credential
-         $RepositoriesCredential.'MyGet' = @(1..2)
+      Context "'Test-RepositoriesCredential' function. Invalid credential hashtable." {
+         It "Invalid serialized object : ValidationMustBeHashtable" {
+            $RepositoriesCredential = @(1..2)
 
-         InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
-            $script:FunctionnalErrors.Clear()
-            Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
-            $script:FunctionnalErrors.Count | Should -Be 1
-            $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationWrongItemType
+            InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+               $script:FunctionnalErrors.Clear()
+               Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
+               $script:FunctionnalErrors.Count | Should -Be 1
+               $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationMustBeHashtable
+            }
          }
-      }
 
-      It "Invalid serialized object : ValidationInvalidKey" {
-         $Credential = New-Object PSCredential('Test', $(ConvertTo-SecureString 'Test' -AsPlainText -Force) )
-         $RepositoriesCredential = @{}
-         $RepositoriesCredential.'' = $Credential
+         It "Invalid serialized object : ValidationMustContainAtLeastOneEntry" {
+            $RepositoriesCredential = @{}
 
-         InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
-            $script:FunctionnalErrors.Clear()
-            Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
-            $script:FunctionnalErrors.Count | Should -Be 1
-            $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationInvalidKey
+            InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+               $script:FunctionnalErrors.Clear()
+               Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
+               $script:FunctionnalErrors.Count | Should -Be 1
+               $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationMustContainAtLeastOneEntry
+            }
          }
-      }
 
-      It "Invalid serialized object : ValidationUnknownRepository" {
-         $Credential = New-Object PSCredential('Test', $(ConvertTo-SecureString 'Test' -AsPlainText -Force) )
-         $RepositoriesCredential = @{}
-         $RepositoriesCredential.'PSGallery' = $Credential
-         $RepositoriesCredential.'UnknownRepository' = $Credential
+         It "Invalid serialized object : ValidationWrongItemType" {
+            $Credential = New-Object PSCredential('Test', $(ConvertTo-SecureString 'Test' -AsPlainText -Force) )
+            $RepositoriesCredential = @{}
+            $RepositoriesCredential.'PSGallery' = $Credential
+            $RepositoriesCredential.'MyGet' = @(1..2)
 
-         InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
-            $script:FunctionnalErrors.Clear()
-            Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
-            $script:FunctionnalErrors.Count | Should -Be 1
-            $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationUnknownRepository
+            InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+               $script:FunctionnalErrors.Clear()
+               Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
+               $script:FunctionnalErrors.Count | Should -Be 1
+               $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationWrongItemType
+            }
+         }
+
+         It "Invalid serialized object : ValidationInvalidKey" {
+            $Credential = New-Object PSCredential('Test', $(ConvertTo-SecureString 'Test' -AsPlainText -Force) )
+            $RepositoriesCredential = @{}
+            $RepositoriesCredential.'' = $Credential
+
+            InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+               $script:FunctionnalErrors.Clear()
+               Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
+               $script:FunctionnalErrors.Count | Should -Be 1
+               $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationInvalidKey
+            }
+         }
+
+         It "Invalid serialized object : ValidationUnknownRepository" {
+            $Credential = New-Object PSCredential('Test', $(ConvertTo-SecureString 'Test' -AsPlainText -Force) )
+            $RepositoriesCredential = @{}
+            $RepositoriesCredential.'PSGallery' = $Credential
+            $RepositoriesCredential.'UnknownRepository' = $Credential
+
+            InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+               $script:FunctionnalErrors.Clear()
+               Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
+               $script:FunctionnalErrors.Count | Should -Be 1
+               $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationUnknownRepository
+            }
          }
       }
    }
-}

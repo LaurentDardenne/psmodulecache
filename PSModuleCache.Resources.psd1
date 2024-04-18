@@ -24,10 +24,11 @@ ConvertFrom-StringData @'
     RQMN_RepositoryPartInvalid                         = Repository qualified module name : the 'repository name' part cannot be an empty string.
     RQMN_RepositoryNotExist                            = Repository qualified module name : the repository name '{0}' does not exist.
     InvalidNameUnderUbuntu                             = {0} name is invalid under Ubuntu : '{1}'. The '.psd1 and '.psm1' files  must have the same casing, otherwise the search by Import-Module will fail
-    ValidationMustBeHashtable                          = Repository credentials must be saved in a hashtable [System.Collections.Hashtable]
+    ValidationMustBeHashtable                          = Repository credentials must be saved in a hashtable [System.Collections.Hashtable].Actual type :'{0}'
     ValidationMustContainAtLeastOneEntry               = The repositories credentials hashtable is empty, it must contain at least one entry.
     ValidationWrongItemType                            = The objects contained in the repository credentials hashtable must be of type [Key=String,Value=PScredential].
     ValidationInvalidKey                               = The repositories credentials hashtable can not contains a key which is an empty string.
     ValidationUnknownRepository                        = A PSRepository name referenced in the repository credentials hashtable does not exist or cannot be found.
-    EmptyCredentialFileName                            = The name of the file containing the credential is empty, has the environment variable 'PSModuleCacheCredentialFileName' been created?
+    ImpossibleToReadTheCredentialFile                  = Impossible to read the credentials XML file : '{0}'.
+    InvalidObject                                      = The credentials XML file generate $null value.
 '@

@@ -54,7 +54,75 @@ l'enregistrement des nouveaux repo se fait avant et on doit connaitre les infos
           $RepositoriesAuthenticationFileName='RepositoriesCredential.Datas.ps1xml'
           $Env:PSModuleCacheCredentialFileName=$RepositoriesAuthenticationFileName
 
+---
+#Credential doit être un objet donet valide, pas null, même si le mot de passe est vide : $credential=[PSCredential]::Empty
+$credential = New-Object PSCredential('token',$(ConvertTo-SecureString 'ts8bA3cmWUdaG9b6' -AsPlainText -Force))
+Register-PackageSource -Name 'privatepsmodulecache' -Location 'https://nuget.cloudsmith.io/actionpsmodulecache/privatepsmodulecache/v2/' -Trusted -Credential $credential -ProviderName NuGet
+Register-PSRepository -Name 'privatepsmodulecache' -SourceLocation 'https://nuget.cloudsmith.io/actionpsmodulecache/privatepsmodulecache/v2/' -InstallationPolicy 'trusted' -Credential $credential
 
+
+Pas de résultat mais pas d'erreur :
+find-module -Name * -Repository 'actionpsmodulecache-privatepsmodulecache'
+
+NOK ( les cred sont faux,pas de résultat mais pas d'erreur ) :
+find-module -Name * -Repository 'actionpsmodulecache-privatepsmodulecache' -Credential $credFaux
+
+OK :
+find-module -Name * -Repository 'actionpsmodulecache-privatepsmodulecache' -Credential $credential
+
+On doit connaitre le nom du repo afin de retrouver les cred
+
+#1-pas de repo avec cred, pas de ( nouveau ) pb
+
+#2-deux repos mais un seul avec des cred
+ find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache', 'psgallery' -Credential $credential
+Ici PSGet n'utilise les informations d'identification que si l'un des référentiels en demande un. Sinon, le cmdlet ne prend pas en compte le paramètre -Credential.
+
+#3-trois repos dont deux avec des cred IMPOSSIBLE
+ find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache', 'privategallery' -Credential $credential
+
+collision interroger + repo pour un même module (revoir les tests existant)
+
+-->
+Le texte de solution proposé sur github ne fonctionne qu'avec un seul Repo.
+Save-module ne prend qu'un seul credential de repo mais on le connait
+
+Find-module ne prend qu'un seul credential de repo et on interroge + repo on ne peut pas ( à tester) indiquer un seul cred pour + repo.
+La v2 de psget associe en dehors du module un nom de repo à un cred.
+On doit utiliser un nom de repo pour utiliser des credentials !!! Syntaxe RQMN.
+
+dans la fonction 'Find-ModuleCacheDependencies' on doit déterminer comment rechercher le module dans un seul ou dans plusieurs repo
+
+psrepository ne permet pas de savoir si un repo nécessite des credential :
+Invoke-RESTmethod -uri 'https://nuget.cloudsmith.io/actionpsmodulecache/privatepsmodulecache/v2'
+-> ok ou error ( a analyser)
+ $e.Exception : System.Net.WebException
+  $e.Exception.Response.StatusCode
+
+System.Net.HttpStatusCode: Unauthorized (401) indicates that the requested resource requires authentication.
+ici pas de besoin de connaitre la path de nuget.exe
+
+créer la hashtable, valide l'uri et les cred, ajoute un champ bool 'RepodNeedCredential'.
+La hashtable doit contenir tout les noms de repo déclaré.
+le fichier existe avant le chargement du module on peut donc connaitre les repo sans crédential ?
+par défaut on peut pas savoir lesquel utilise des cred
+<--
+
+PSget v3
+  CredentialInfo = [Microsoft.PowerShell.PSResourceGet.UtilClasses.PSCredentialInfo]
+  on couple psget avec un vault, on enregistre le nom du vault et la clé et c'est le vault qui donne le credential
+
+doc insuffisante on couple deux module mais la doc n'explique pas comment compléter le scénario de l'exemple 4 :
+ https://learn.microsoft.com/fr-fr/powershell/module/microsoft.powershell.psresourceget/register-psresourcerepository?view=powershellget-3.x
+
+ todo Tester l'exemple 4 avec privatepsmodulecache
+ https://learn.microsoft.com/fr-fr/powershell/module/microsoft.powershell.psresourceget/register-psresourcerepository?view=powershellget-3.x
+
+ todo rechercher dans la doc de PsSecretManagement
+
+
+ fichier des repo ; psget le lit une fois lors du charglment du moudle, il est utilisé par les deux sessions( 5.1 et PSCore)
+ mais n'est pas mis à jour en cas de modif dans l'une des deux sesionss
 #>
 $RepositoriesAuthenticationFileName = 'RepositoriesCredential.Datas.ps1xml'
 $Env:PSModuleCacheCredentialFileName = $RepositoriesAuthenticationFileName
@@ -102,6 +170,7 @@ $RemoteRepositories = @(
     }
 )
 
+#todo usage séquentiel.Le fichier xml des repo est partagé par PS v5.1 et PS Core
 Try {
     Get-PackageSource PSModuleCache -ErrorAction Stop >$null
 } catch {

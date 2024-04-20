@@ -18,13 +18,13 @@ try {
     }
 
     #todo .\MatrixRepositoriesWithCredential.yml on doit configurer les deux versions ?
-    #todo Tester si la création d'un PSrepo sous v5.1 est accessible sous PSCore ( doit-on recharger le module s'il est en mémoire au monet de la création ?)
+    #la création d'un PSrepo sous v5.1 est accessible sous PSCore.
     # Get-PackageProvider; Get-PackageSource; Get-PSRepository
 
     #v2
-    # C:\Users\Laurent\AppData\Local\PowerShellGet\PSResourceRepository.xml
-    # C:\Users\Laurent\AppData\Local\PowerShellGet\PSResourceRepository.xml
-    #C:\Users\Laurent\AppData\Local\Microsoft\Windows\PowerShell\PowerShellGet\PSRepositories.xml
+    # C:\Users\Laurent\AppData\Local\PowerShellGet\PSResourceRepository.xml (?)
+    #
+    # C:\Users\Laurent\AppData\Local\Microsoft\Windows\PowerShell\PowerShellGet\PSRepositories.xml
 
     #v3
     #C:\Users\Laurent\AppData\Local\PSResourceGet\PSResourceRepository.xml

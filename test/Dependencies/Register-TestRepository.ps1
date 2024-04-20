@@ -78,6 +78,8 @@ On doit connaitre le nom du repo afin de retrouver les cred
  find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache', 'psgallery' -Credential $credential
 Ici PSGet n'utilise les informations d'identification que si l'un des référentiels en demande un. Sinon, le cmdlet ne prend pas en compte le paramètre -Credential.
 
+TODO https://feedz.io
+
 #3-trois repos dont deux avec des cred IMPOSSIBLE
  find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache', 'privategallery' -Credential $credential
 
@@ -92,15 +94,6 @@ La v2 de psget associe en dehors du module un nom de repo à un cred.
 On doit utiliser un nom de repo pour utiliser des credentials !!! Syntaxe RQMN.
 
 dans la fonction 'Find-ModuleCacheDependencies' on doit déterminer comment rechercher le module dans un seul ou dans plusieurs repo
-
-psrepository ne permet pas de savoir si un repo nécessite des credential :
-Invoke-RESTmethod -uri 'https://nuget.cloudsmith.io/actionpsmodulecache/privatepsmodulecache/v2'
--> ok ou error ( a analyser)
- $e.Exception : System.Net.WebException
-  $e.Exception.Response.StatusCode
-
-System.Net.HttpStatusCode: Unauthorized (401) indicates that the requested resource requires authentication.
-ici pas de besoin de connaitre la path de nuget.exe
 
 créer la hashtable, valide l'uri et les cred, ajoute un champ bool 'RepodNeedCredential'.
 La hashtable doit contenir tout les noms de repo déclaré.
@@ -195,6 +188,7 @@ foreach ($Repository in $RemoteRepositories) {
     $Name = $Repository.Name
     try {
         Get-PSRepository $Name -ErrorAction Stop >$null
+        #todo code FAUX
     } catch {
         if ($_.CategoryInfo.Category -ne 'ObjectNotFound') {
             throw $_

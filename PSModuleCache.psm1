@@ -186,13 +186,13 @@ Function Import-Credential {
 
    try {
       $Credentials = Import-Clixml -Path $Path
-      if ($null -eq $Credential) {
+      if ($null -eq $Credentials) {
          $message = $PSModuleCacheResources.InvalidObject
          #Add-FunctionnalError -Message $Message
          throw $Message
       }
 
-      return , $Credential
+      return , $Credentials
    } catch [System.Xml.XmlException] {
       # Missing root element : the file has a size of zero
       #Data at the root level is invalid : The file do not contains xml Datas
@@ -203,6 +203,7 @@ Function Import-Credential {
    }
 }
 
+#todo renommer, on valide la structure et son contenu
 Function Test-RepositoriesCredential {
    <#
 Check if a serialized object matches the expected structure rules:
@@ -225,37 +226,89 @@ Check if a serialized object matches the expected structure rules:
    }
 
    $ValidationTypes = { ($_.Key -is [System.String]) -and ($_.Value -is [System.Management.Automation.PSCredential]) }
+
    $ValidationKeys = { $_.Key -ne [string]::Empty }
-   $ValidationRepositories = { $null -ne (Get-PSRepository -Name $_.Key -ErrorAction SilentlyContinue) }
+
+   $ValidationRepositories = {
+      $name = $_.key
+      $result = $name -in $script:RepositoryNames
+      if (-not $result)
+      { Add-FunctionnalError -Message ( $PSModuleCacheResources.ValidationUnknownRepository -f $name ) }
+      $result
+   }
+
+   $ValidationRepositoryCredential = {
+      <#
+      With PowershellGet v2 we don't know if a PsRepository requires credentials.
+      In case of wrong credential 'Find-Module' returns the generic error:
+      !! PackageManagement\Find-Package: No match was found for the specified search criteria and module name
+   #>
+      $Repository = Get-PSRepository -Name $_.Key
+      $base = [uri]::new($Repository.SourceLocation)
+      $Uri = [uri]::new($base, "FindPackagesById()?id='ModuleThatDoesNotExist'")
+      try {
+         #We validate the access not the result.
+         Invoke-RestMethod -Uri $Uri -Credential $Credential > $null
+         $result = $true
+      } catch [System.Net.WebException] {
+         if ($_.Response.StatusCode -eq [System.Net.HttpStatusCode]::'Unauthorized') {
+            Add-FunctionnalError -Message ( $PSModuleCacheResources.ValidationRepositoryInvalidCredential -f $Repository.Name )
+         } else {
+            Add-FunctionnalError -Message "ValidationRepositoryInvalidCredential:$_"
+         }
+         $result = $false
+      } catch {
+         Add-FunctionnalError -Message "ValidationRepositoryInvalidCredential:$_"
+         $result = $false
+      }
+      return $result
+   }
    $Result = $false
 
    if ($InputObject -is [System.Collections.Hashtable]) {
       if ($InputObject.Count -ge 1) {
          if (Test-TrueforAll -Validation $ValidationTypes ) {
             if (Test-TrueforAll -Validation $ValidationKeys ) {
-               if (Test-TrueforAll -Validation $ValidationRepositories )
-               { $result = $true }
-               else
-               { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationUnknownRepository }
+               if (Test-TrueforAll -Validation $ValidationRepositories ) {
+                  if (Test-TrueforAll -Validation $ValidationRepositoryCredential )
+                  { $result = $true }
+                  else {
+                     #case already treated
+                     'ValidationRepositoryInvalidCredential' > $null
+                  }
+               } else
+               { 'ValidationUnknownRepository' > $null }
             } else
             { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationInvalidKey }
          } else
          { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationWrongItemType }
       } else
       { Add-FunctionnalError -Message $PSModuleCacheResources.ValidationMustContainAtLeastOneEntry }
-   } else
-   { Add-FunctionnalError -Message ( $PSModuleCacheResources.ValidationMustBeHashtable -f $InputObject.GetType() ) }
+      else
+      { Add-FunctionnalError -Message ( $PSModuleCacheResources.ValidationMustBeHashtable -f $InputObject.GetType() ) }
+   }
    return $Result
 }
 
 Function Update-RepositoriesCredential {
-   # All repositories must be associated with a valid or empty credential object
+   # All repositories must be associated with a valid credential object
    Param()
 
    foreach ($RepoName in $script:RepositoryNames) {
       if (-not $script:RepositoriesCredential.ContainsKey($RepoName)) {
-         #We assume that the other repositories do not use credential.
-         #if we use the 'credential' parameter with Find/Save-Module its value cannot be $null and if it is 'empty' PsGet does not take it into account.
+         <#
+          We assume that the other repositories do not use credential.
+          if we use the 'credential' parameter with Find/Save-Module its value cannot be $null and
+          if it is 'empty' PowershellGet does not take it into account.
+
+          Example ('privatepsmodulecache' need credential) :
+
+            >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache' -Credential $null
+             !!!PackageManagement\Find-Package : Unable to find repository 'privatepsmodulecache'.
+
+           >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache' -Credential [PSCredential]::Empty
+            !!!PackageManagement\Find-Package : No match was found for the specified search criteria and module name 'PnP.PowerShell'.
+         #>
          $script:RepositoriesCredential.Add($RepoName, [PSCredential]::Empty)
       }
    }
@@ -264,11 +317,14 @@ Function Update-RepositoriesCredential {
 Function Set-RepositoriesCredential {
    <#
 if the RepositoriesAuthentication file exist and contains an valid object THEN
-  - assigns $TRUE to $isExistRepositoriesWithCredential,
   - load the xml file $RepositoriesAuthenticationFullPath
-  - tests the hashtable structure.
+  - assigns $TRUE to $isExistRepositoriesWithCredential,
+  - tests the hashtable structure,
+  - update $RepositoriesCredential and isExistRepositoriesWithCredential.
 
 Used when searching and saving a module.
+
+Note :
 #>
    param()
 
@@ -280,11 +336,16 @@ Used when searching and saving a module.
       #The variable is protected but its content is mutable.
       Set-Variable -Name RepositoriesCredential -Value $Credentials -Force
 
-      Update-RepositoriesCredential #todo var /param
-
       Set-Variable -Name isExistRepositoriesWithCredential -Value $true -Force
+   } else {
+      #todo si pas de fichier, mais que l'on utilise -cred avec find-module on doit avoir RepositoriesCredential renseigné avec 'empty'
+      $Empty = @{}
+      Set-Variable -Name RepositoriesCredential -Value $Empty -Force
    }
+
+   Update-RepositoriesCredential
 }
+
 function Test-RepositoryName {
    #Repository Qualified Module Name : Repository name cannot be empty and must exist
    param($RepositoryName)
@@ -340,7 +401,6 @@ Function Get-RepositoryQualifiedModuleName {
 
 Function New-FindModuleParameters {
    #Analyze a module name and build a hashtable for 'Find-ModuleCacheDependencies' parameters.
-   #When $Name use the 'Repository Qualified Module Name' syntax we return only the module name.
    param (
       $Name,
       $Version
@@ -353,6 +413,7 @@ Function New-FindModuleParameters {
    }
    $isRepositoryQualified = $null -ne $RQMN.RepositoryName
 
+   #if a module is preceded by a repository name we search in a single repository otherwise in all declared repositories
    if ($isRepositoryQualified)
    { $Repository = $RQMN.RepositoryName }
    else
@@ -1016,6 +1077,7 @@ function Find-ModuleCacheDependencies {
       if ($script:IsThereOnlyOneRegisteredRepository -or $isModuleNameRepositoryQualified) {
          Write-Debug "`tONLY ONE repository"
 
+         #todo    { $PSBoundParameters.Credential = $script:RepositoriesCredential.$Repository }
          #We are looking for a module name.
          #In this case $Repository is correctly filled in and contains ONLY ONE item.
          $ModulesFound = @(Find-Module @PSBoundParameters -IncludeDependencies -ErrorAction Stop)
@@ -1028,7 +1090,10 @@ function Find-ModuleCacheDependencies {
          $ModulesFound = Remove-ModuleDependencyDuplicate -ModulesFound $ModulesFound
       } else {
          Write-Debug "`tSEVERAL repositories"
-
+         #todo    Si + repo Find-Module recherche dans tous les repo { $PSBoundParameters.Credential = $script:RepositoriesCredential.$Repository }
+         #todo    { $PSBoundParameters.Credential = $script:RepositoriesCredential.$Repository }
+         #todo on doit boucler sur tous les repo, un par un.
+         #!!! reproduire , avec un repo+cred, un cas renvoyant + entrée, on doit vérifier le traitement autour de group-object
          #We are looking for a module name, it can exist in several repositories.
          #In this case $Repository contains ALL names of the declared repositories.
          $ModulesFound = @(Find-Module @PSBoundParameters -IncludeDependencies -ErrorAction Stop)

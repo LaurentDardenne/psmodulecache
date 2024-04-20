@@ -28,7 +28,8 @@ ConvertFrom-StringData @'
     ValidationMustContainAtLeastOneEntry               = The repositories credentials hashtable is empty, it must contain at least one entry.
     ValidationWrongItemType                            = The objects contained in the repository credentials hashtable must be of type [Key=String,Value=PScredential].
     ValidationInvalidKey                               = The repositories credentials hashtable can not contains a key which is an empty string.
-    ValidationUnknownRepository                        = A PSRepository name referenced in the repository credentials hashtable does not exist or cannot be found.
+    ValidationUnknownRepository                        = The PsRepository '{0}' referenced in the repository credentials hashtable does not exist or cannot be found.
+    ValidationRepositoryInvalidCredential              = The credential is invalid for the PsRepository '{0}'.
     ImpossibleToReadTheCredentialFile                  = Impossible to read the credentials XML file : '{0}'.
     InvalidObject                                      = The credentials XML file generate $null value.
 '@

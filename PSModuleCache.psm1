@@ -44,7 +44,6 @@ New-Variable -Name RepositoriesAuthenticationFileName -Option ReadOnly -Scope Sc
 New-Variable -Name RepositoriesAuthenticationFullPath -Option ReadOnly -Scope Script -Value (Join-Path $home -ChildPath $script:RepositoriesAuthenticationFileName)
 
 New-Variable -Name RepositoriesCredential -Option ReadOnly -Scope Script -Value $null
-New-Variable -Name isExistRepositoriesWithCredential -Option ReadOnly -Scope Script -Value $false
 
 #We do not check all the characters returned by the GetInvalidFileNameChars() API.
 New-Variable -Name InvalidCharsExceptBackslash -Option ReadOnly -Scope Script -Value '"|\<|\>|\||\*|\?|/|\:'
@@ -195,7 +194,7 @@ Function Import-Credential {
       return , $Credentials
    } catch [System.Xml.XmlException] {
       # Missing root element : the file has a size of zero
-      #Data at the root level is invalid : The file do not contains xml Datas
+      # Data at the root level is invalid : The file do not contains xml Datas
       $Message = $PSModuleCacheResources.ImpossibleToReadTheCredentialFile -f $Path
       $Message += "`r`n$_"
       Add-FunctionnalError -Message $Message
@@ -206,15 +205,16 @@ Function Import-Credential {
 #todo renommer, on valide la structure et son contenu
 Function Test-RepositoriesCredential {
    <#
-Check if a serialized object matches the expected structure rules:
-   if UseRepositoriesWithCredential equal $true THEN
-    - file must exist,
+Check if a deserialized object matches the expected structure.
+
+Returns true when the object is conform to all the following rules:
     - the XML file must be valid,
-    - it must contain a hashtable
-    - It must contain at least one entry
-    - all entries must be of type [Key=string,Value=credential]
-    - a key must not be an empty string
-    -for each key name a corresponding psrepository must exist
+    - it must contain a hashtable,
+    - It must contain at least one entry,
+    - all entries must be of type [Key=string,Value=credential],
+    - a key must not be an empty string,
+    - for each key name a corresponding psrepository must exist,
+    - each credential must be valid.
 #>
    param ($InputObject)
 
@@ -241,7 +241,7 @@ Check if a serialized object matches the expected structure rules:
       <#
       With PowershellGet v2 we don't know if a PsRepository requires credentials.
       In case of wrong credential 'Find-Module' returns the generic error:
-      !! PackageManagement\Find-Package: No match was found for the specified search criteria and module name
+      !! PackageManagement\Find-Package: No match was found for the specified search criteria and module name ...
    #>
       $Repository = Get-PSRepository -Name $_.Key
       $base = [uri]::new($Repository.SourceLocation)
@@ -291,24 +291,41 @@ Check if a serialized object matches the expected structure rules:
 }
 
 Function Update-RepositoriesCredential {
-   # All repositories must be associated with a valid credential object
+   <#
+    All repositories must be associated with a valid credential object.
+    if we use the 'credential' parameter with Find-Module or Save-Module its value cannot be $null and if it is 'empty' PowershellGet
+    does not take it into account.
+
+    Examples ('privatepsmodulecache' need credential) :
+
+      >$Credential=$null
+      >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache' -Credential $Credential
+       !!PackageManagement\Find-Package : Unable to find repository 'privatepsmodulecache'.
+      > find-module -Name PnP.PowerShell -Repository 'PSGallery' -Credential $Credential
+       !!PackageManagement\Find-Package : Unable to find repository 'psgallery'.
+
+      >$Credential=[PSCredential]::Empty
+      >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache' -Credential $Credential
+      >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache'
+       !!PackageManagement\Find-Package : No match was found for the specified search criteria and module name 'PnP.PowerShell'.
+
+      >Credential=[PSCredential]::Empty
+      >find-module -Name PnP.PowerShell -Repository 'PSGallery' -Credential $Credential
+      # ? Successful. No error
+
+    Note :
+     [PSCredential]::Empty : Gets an empty PSCredential. This is an PSCredential with both UserName and Password initialized to null.
+
+    A joke :
+    >#$verbosePreference='continue'
+    >find-module -Name * -Repository 'privatepsmodulecache'
+    #WARNING : Object reference not set to an instance of an object.
+    # * Successful. No error
+   #>
    Param()
 
    foreach ($RepoName in $script:RepositoryNames) {
       if (-not $script:RepositoriesCredential.ContainsKey($RepoName)) {
-         <#
-          We assume that the other repositories do not use credential.
-          if we use the 'credential' parameter with Find/Save-Module its value cannot be $null and
-          if it is 'empty' PowershellGet does not take it into account.
-
-          Example ('privatepsmodulecache' need credential) :
-
-            >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache' -Credential $null
-             !!!PackageManagement\Find-Package : Unable to find repository 'privatepsmodulecache'.
-
-           >find-module -Name PnP.PowerShell -Repository 'privatepsmodulecache' -Credential [PSCredential]::Empty
-            !!!PackageManagement\Find-Package : No match was found for the specified search criteria and module name 'PnP.PowerShell'.
-         #>
          $script:RepositoriesCredential.Add($RepoName, [PSCredential]::Empty)
       }
    }
@@ -319,12 +336,7 @@ Function Set-RepositoriesCredential {
 if the RepositoriesAuthentication file exist and contains an valid object THEN
   - load the xml file $RepositoriesAuthenticationFullPath
   - assigns $TRUE to $isExistRepositoriesWithCredential,
-  - tests the hashtable structure,
-  - update $RepositoriesCredential and isExistRepositoriesWithCredential.
-
-Used when searching and saving a module.
-
-Note :
+  - tests the hashtable structure.
 #>
    param()
 
@@ -333,16 +345,17 @@ Note :
       $Object = Import-Credential -Path $script:RepositoriesAuthenticationFullPath
 
       $Credentials = Test-RepositoriesCredential -InputObject $Object
-      #The variable is protected but its content is mutable.
-      Set-Variable -Name RepositoriesCredential -Value $Credentials -Force
 
-      Set-Variable -Name isExistRepositoriesWithCredential -Value $true -Force
+      #The variable $RepositoriesCredential is protected but its content is mutable.
+      #https://learn.microsoft.com/en-us/dotnet/api/system.collections.specialized.ordereddictionary.asreadonly?view=netframework-4.5.1
+      #$h=([ordered]@{'Open'=1}).AsReadOnly(); Error with : $h.Open=2 or $h.Close=2
+      Set-Variable -Name RepositoriesCredential -Value $Credentials -Force
    } else {
-      #todo si pas de fichier, mais que l'on utilise -cred avec find-module on doit avoir RepositoriesCredential renseigné avec 'empty'
       $Empty = @{}
       Set-Variable -Name RepositoriesCredential -Value $Empty -Force
    }
 
+   #In all cases we will use the -Credential parameter with Find-Module and Save-Module.
    Update-RepositoriesCredential
 }
 
@@ -1093,6 +1106,7 @@ function Find-ModuleCacheDependencies {
          #todo    Si + repo Find-Module recherche dans tous les repo { $PSBoundParameters.Credential = $script:RepositoriesCredential.$Repository }
          #todo    { $PSBoundParameters.Credential = $script:RepositoriesCredential.$Repository }
          #todo on doit boucler sur tous les repo, un par un.
+         #!! tester un par un en l'état, tester le repos avec cred plus tard
          #!!! reproduire , avec un repo+cred, un cas renvoyant + entrée, on doit vérifier le traitement autour de group-object
          #We are looking for a module name, it can exist in several repositories.
          #In this case $Repository contains ALL names of the declared repositories.
@@ -1388,8 +1402,8 @@ function New-ModuleCacheParameter {
    return $modulecacheparam
 }
 
-$parms = @{
+$ExportedMembers = @{
    Function = 'New-ModuleCacheParameter', 'Find-ModuleCacheName', 'Get-ModuleCache', 'Get-ModuleSavePath', 'New-ModuleSavePath', 'Save-ModuleCache', 'ConvertTo-YamlLineBreak'
    Variable = 'CacheFileName', 'RepositoryNames', 'PsWindowsModulePath', 'PsWindowsCoreModulePath', 'PsLinuxCoreModulePath'
 }
-Export-ModuleMember @parms
+Export-ModuleMember @ExportedMembers

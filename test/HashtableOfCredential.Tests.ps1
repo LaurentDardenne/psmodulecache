@@ -1,6 +1,7 @@
 #HashtableOfCredential.Tests.ps1
 # Check if a serialized object matches the expected structure
 
+#todo tjr tester la structure, mais les test d'un PsRepo avec cred dépend de la config du reposoitry Github...
 <#
 !!! combinaisons pour les tests
 un repo : psgallery (FAIT)
@@ -14,8 +15,8 @@ duplication avec deux repos, un sans et un autre avec credential :  psgallery et
 duplication avec deux repos, les deux credential :  psgallery et privateDuplicatepsmodulecache (A FAIRE)
 
 
-Créer les module à publier dans un repo avec credential ( pas de duplication).
-Créer une repository pour les module dupliqués ( avec lequel/lesquels ?)
+Créer les modules à publier dans un repo avec credential ( pas de duplication).
+Créer un repository pour les module dupliqués ( avec lequel/lesquels ?)
 #>
 $global:PSModuleCacheResources = Import-PowerShellDataFile "$PSScriptRoot/../PSModuleCache.Resources.psd1" -EA Stop
 Import-Module "$PSScriptRoot/../PSModuleCache.psd1" -Force
@@ -24,6 +25,7 @@ Describe "'Test-RepositoriesCredential' function. When there is no error." -Tag 
 
    Context "Valid hashtable object" {
       It "Only one entry" -Skip:((Test-Path Env:CLOUDSMITHPASSWORD) -eq $false) {
+         #todo utiliser un fichier
          $Credential = New-Object PSCredential($Env:CLOUDSMITHACCOUNTNAME, $(ConvertTo-SecureString $Env:CLOUDSMITHPASSWORD -AsPlainText -Force) )
          $RepositoriesCredential = @{}
          $RepositoriesCredential.'PSGallery' = $Credential
@@ -35,10 +37,10 @@ Describe "'Test-RepositoriesCredential' function. When there is no error." -Tag 
       }
 
       It "Two entries" -Skip:((Test-Path Env:CLOUDSMITHPASSWORD) -eq $false) {
-         $Credential = New-Object PSCredential($Env:CLOUDSMITHACCOUNTNAME, $(ConvertTo-SecureString $Env:CLOUDSMITHPASSWORD -AsPlainText -Force) )
+         #todo utiliser un fichier
          $RepositoriesCredential = @{}
-         $RepositoriesCredential.'PSGallery' = $Credential
-         $RepositoriesCredential.'OttoMatt' = $Credential #todo contains $null ?
+         $RepositoriesCredential.'PSGallery' = [PSCredential]::Empty
+         $RepositoriesCredential.'OttoMatt' = [PSCredential]::Empty
 
          InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
             $script:FunctionnalErrors.Clear()
@@ -47,6 +49,7 @@ Describe "'Test-RepositoriesCredential' function. When there is no error." -Tag 
       }
 
       It "Find-Module with credential" -Skip:((Test-Path Env:CI) -eq $false) {
+         #todo créer un fichier de test
          $Path = Join-Path $home -ChildPath $Env:PSModuleCacheCredentialFileName
          $RepositoriesCredential = Import-Clixml -Path $Path
 
@@ -59,48 +62,55 @@ Describe "'Test-RepositoriesCredential' function. When there is no error." -Tag 
 
 Describe "Repositories with credential. When there error." -Tag 'HashtableValidation' {
    Context "Invalid file." {
-      It 'The file exist but contains zero octet.' { #todo
-         $Path = Join-Path $home -ChildPath $Action.RepositoriesAuthenticationFileName
-         fsutil.exe file createnew "$Path" 0
-         try {
-            $RepositoriesCredential = Import-Clixml -Path $Path
-         } catch [System.Xml.XmlException] {
-            if ($_.hresult -eq 0x80131940) #-2146232000 :Missing root element
-            {}
-
-         }
+      It 'The file exist but contains zero octet.' {
          InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
             $script:FunctionnalErrors.Clear()
-            Test-RepositoriesCredential -InputObject $Datas | Should -Be $false
+            #todo home pointe sur New-Item  "TestDrive:\file1.txt" ?
+            [string]::Empty > "$script:RepositoriesAuthenticationFullPath"
+
+            Import-Credential -Path $script:RepositoriesAuthenticationFullPath > $null
+
             $script:FunctionnalErrors.Count | Should -Be 1
-            $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.ValidationMustBeHashtable
+            $script:FunctionnalErrors[0] | Should -Match '^Impossible to read the credentials XML file'
          }
       }
-      It 'The file exist but it is not a xml file.' { #todo
-         <#
-@'
+
+      It 'The file exist but it is not a xml file.' {
+         InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+            $script:FunctionnalErrors.Clear()
+            @'
 Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"
-'@ > c:\temp\testfile
-#>
+'@ > "$script:RepositoriesAuthenticationFullPath"
+
+            Import-Credential -Path $script:RepositoriesAuthenticationFullPath > $null
+
+            $script:FunctionnalErrors.Count | Should -Be 1
+            $script:FunctionnalErrors[0] | Should -Match '^Impossible to read the credentials XML file'
+         }
       }
 
-      It 'The file exist but Import-ClimXml return $null.' { #todo
-
-         <#
-@'
+      It 'The file exist and it contains a valid xml but Import-ClimXml return $null.' {
+         InModuleScope 'PsModuleCache' -Parameters @{ Datas = $RepositoriesCredential } {
+            $script:FunctionnalErrors.Clear()
+            @'
 <Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">
 </Objs>
-'@ > c:\temp\testfile
-#>
+'@ > "$script:RepositoriesAuthenticationFullPath"
+
+            Import-Credential -Path $script:RepositoriesAuthenticationFullPath > $null
+
+            $script:FunctionnalErrors.Count | Should -Be 1
+            $script:FunctionnalErrors[0] | Should -Be $global:PSModuleCacheResources.InvalidObject
+         }
       }
 
       Context "Invalid setting." {
          It "Action`'s 'UseRepositoriesWithCredential' parameter contains true but the credential file do not exist." {
-            throw 'todo' #todo
+            throw 'a faire' #todo tester la présence et l'absence de fichier de credentials
          }
 
          It "Action`'s 'UseRepositoriesWithCredential' parameter contains false but the file exist." {
-            throw 'todo'
+            throw 'a faire'
          }
       }
 

@@ -18,10 +18,6 @@ inputs:
     description: "Triggers an update of one or more modules."
     required: false
     default: "false"
-  userepositorieswithcredential:
-    description: "Indicates the use of credential when accessing the PSRepository requiring authentication (account name / password)."
-    required: false
-    default: "false"
   prefixidentifier:
     description: "Prefixes the cache key name with the Workflow name ($env:GITHUB_WORKFLOW). Used to group cache keys."
     required: false

@@ -144,14 +144,14 @@ $RemoteRepositories = @(
         name            = 'OttoMatt'
         publishlocation = 'https://www.myget.org/F/ottomatt/api/v2/package'
         sourcelocation  = 'https://www.myget.org/F/ottomatt/api/v2'
-        credential      = $null
+        credential      = [PSCredential]::Empty
     },
 
     [PsCustomObject]@{
         name            = $CloudsmithPrivateRepositoryName
         publishlocation = $CloudsmithPrivateUriLocation
         sourcelocation  = $CloudsmithPrivateUriLocation
-        credential      = $null
+        credential      = [PSCredential]::Empty
     },
 
 
@@ -188,7 +188,7 @@ foreach ($Repository in $RemoteRepositories) {
     $Name = $Repository.Name
     try {
         Get-PSRepository $Name -ErrorAction Stop >$null
-        #todo code FAUX
+        #todo logique à revoir. Dépend de l'ordre de construction ?
     } catch {
         if ($_.CategoryInfo.Category -ne 'ObjectNotFound') {
             throw $_
@@ -201,7 +201,7 @@ foreach ($Repository in $RemoteRepositories) {
             }
             Write-Verbose "Register repository '$($Repository.Name). With credential ?$($null -ne $Repository.Credential)"
 
-            if ($null -ne $Repository.Credential )
+            if ($Repository.Credential -ne [PSCredential]::Empty )
             { $Parameters.Add('Credential', $Credential) }
 
             # An invalid Web Uri is managed by Register-PSRepository
